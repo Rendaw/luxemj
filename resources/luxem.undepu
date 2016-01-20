@@ -1,0 +1,27 @@
+root : WS arrayBody;
+
+element : type? (primitive | object | array);
+type : (TYPE_OPEN (TYPE_LETTER | ESCAPE_PREFIX ESCAPE)* TYPE_CLOSE);
+primitive : text;
+object : OBJECT_OPEN objectBody OBJECT_CLOSE;
+objectBody : (pair (ELEMENT_SEPARATOR objectBody )? )?;
+pair : key PAIR_SEPARATOR element;
+key : text;
+array : ARRAY_OPEN arrayBody ARRAY_CLOSE;
+arrayBody : (element (ELEMENT_SEPARATOR arrayBody )? )?;
+text : (WORD | TEXT_OPEN_CLOSE (LETTER | ESCAPE_PREFIX ESCAPE)* TEXT_OPEN_CLOSE);
+WS : #([ \t\n] | '*' ( ~[*\\] | '\\' . )* '*')*;
+ELEMENT_SEPARATOR : #',' WS;
+OBJECT_OPEN : #'{' WS;
+OBJECT_CLOSE : #'}' WS;
+ARRAY_OPEN : #'[' WS;
+ARRAY_CLOSE : #']' WS;
+TYPE_OPEN : #'(' WS;
+TYPE_CLOSE : #')' WS;
+TEXT_OPEN_CLOSE : #'"' WS;
+PAIR_SEPARATOR : #':' WS;
+WORD : ~[ \t\n,:{}[\](]+ WS;
+TYPE_LETTER : ~[)\\] WS;
+LETTER : ~["\\] WS;
+ESCAPE_PREFIX : #'\\' WS;
+ESCAPE : . WS;
