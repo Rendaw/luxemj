@@ -1,26 +1,32 @@
 package com.zarbosoft.luxemj;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
+import java.util.Map;
 
-import com.zarbosoft.undepurseable.Callback;
-import com.zarbosoft.undepurseable.Grammar;
-import com.zarbosoft.undepurseable.GrammarParser;
+import com.zarbosoft.pidgoon.bytes.Callback;
+import com.zarbosoft.pidgoon.bytes.Grammar;
+import com.zarbosoft.pidgoon.bytes.GrammarFile;
+import com.zarbosoft.pidgoon.bytes.Parse;
 
 public class Luxem {
 	static private Grammar grammar = null;
-	public static void parse(Callbacks callbacks, String string) throws IOException {
+	static public Grammar grammar() throws IOException {
 		if (grammar == null) {
-			InputStream grammarStream = Thread.currentThread().getContextClassLoader().getResourceAsStream("luxem.undepu");
-			if (grammarStream == null) throw new AssertionError("Could not load luxem.undepu");
-			grammar = GrammarParser
-				.parse(
-					grammarStream, 
-					new HashMap<String, Callback>());
+			InputStream grammarStream = Thread.currentThread().getContextClassLoader().getResourceAsStream("luxem.pidgoon");
+			if (grammarStream == null) throw new AssertionError("Could not load luxem.pidgoon");
+			grammar = GrammarFile
+				.parse()
+				.parse(grammarStream);
 		}
-		grammar.parse("root", new ByteArrayInputStream(string.getBytes(StandardCharsets.UTF_8))); 
+		return grammar;
+	}
+	
+	public static void parse(Map<String, Callback> callbacks, String string) throws IOException {
+		new Parse<>()
+			.grammar(grammar())
+			.node("root")
+			.callbacks(callbacks)
+			.parse(string);
 	}
 }
