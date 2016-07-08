@@ -1,66 +1,85 @@
 package com.zarbosoft.luxemj;
 
+import com.google.common.collect.ImmutableMap;
+import com.zarbosoft.luxemj.path.LuxemArrayPath;
+import com.zarbosoft.luxemj.path.LuxemPath;
+import com.zarbosoft.luxemj.source.*;
+import com.zarbosoft.pidgoon.AbortParse;
+import com.zarbosoft.pidgoon.InvalidStream;
+import com.zarbosoft.pidgoon.bytes.Callback;
+import com.zarbosoft.pidgoon.bytes.Clip;
+import com.zarbosoft.pidgoon.bytes.ClipStore;
+import com.zarbosoft.pidgoon.events.EventStream;
+import com.zarbosoft.pidgoon.internal.BaseParse;
+import com.zarbosoft.pidgoon.internal.Pair;
+
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.function.Function;
 
-import com.google.common.collect.ImmutableMap;
-import com.zarbosoft.luxemj.source.LArrayCloseEvent;
-import com.zarbosoft.luxemj.source.LArrayOpenEvent;
-import com.zarbosoft.luxemj.source.LKeyEvent;
-import com.zarbosoft.luxemj.source.LObjectCloseEvent;
-import com.zarbosoft.luxemj.source.LObjectOpenEvent;
-import com.zarbosoft.luxemj.source.LPrimitiveEvent;
-import com.zarbosoft.luxemj.source.LTypeEvent;
-import com.zarbosoft.pidgoon.bytes.Callback;
-import com.zarbosoft.pidgoon.events.EventStream;
-
-public class Parse<O> extends com.zarbosoft.pidgoon.events.Parse<O> {
-	private Parse(Parse<O> other) {
+public class Parse<O> extends BaseParse<Parse<O>> {
+	private Parse(final Parse<O> other) {
 		super(other);
 	}
-	
+
 	@Override
 	protected Parse<O> split() {
-		return new Parse<O>(this);
+		return new Parse<>(this);
 	}
 
-	public Parse() {}
+	public Parse() {
+	}
 
-	public O parse(String string) throws IOException {
+	public O parse(final String string) {
 		return parse(new ByteArrayInputStream(string.getBytes(StandardCharsets.UTF_8)));
 	}
-	
-	@SuppressWarnings("unchecked")
-	public O parse(InputStream stream) throws IOException {
-		// TODO allow splitting ParseContext, split before each step.  Should be okay since luxem is unambiguous.
-		final EventStream<O> higher = new com.zarbosoft.pidgoon.events.Parse<O>()
-			.grammar(grammar)
-			.callbacks((Map<String, Callback>)(Object)callbacks)
-			.parse();
-		new com.zarbosoft.pidgoon.bytes.Parse<Object>()
-			.grammar(Luxem.grammar())
-			.callbacks(new ImmutableMap.Builder<String, Callback>()
-				.put("OBJECT_OPEN", s -> higher.push(new LObjectOpenEvent()))
-				.put("OBJECT_CLOSE", s -> higher.push(new LObjectCloseEvent()))
-				.put("ARRAY_OPEN", s -> higher.push(new LArrayOpenEvent()))
-				.put("ARRAY_CLOSE", s -> higher.push(new LArrayCloseEvent()))
-				.put("key", s -> higher.push(new LKeyEvent(s.topData().toString())))
-				.put("type", s -> higher.push(new LTypeEvent(s.topData().toString())))
-				.put("primitive", s -> {
-					String type = "";
-					Object pretype = s.peekStack();
-					if ((type != null) && (pretype instanceof LTypeEvent)) {
-						s.popStack();
-						type = ((LTypeEvent)pretype).value;
-					}
-					higher.push(new LPrimitiveEvent(type, s.topData().toString()));
+
+	public O parse(final InputStream stream) {
+		return new com.zarbosoft.pidgoon.bytes.Parse<EventStream<O>>()
+				.stack(() -> {
+					return new Pair<>(
+							new com.zarbosoft.pidgoon.events.Parse<O>()
+									.grammar(grammar)
+									.node(node)
+									.callbacks((Map<String, Callback>) (Object) callbacks)
+									.parse(),
+							new LuxemArrayPath(null)
+					);
 				})
-				.build()
-			)
-			.parse(stream);
-		return higher.finish();
+				.grammar(Luxem.grammar())
+				.node("root")
+				.callbacks(new ImmutableMap.Builder<String, Callback>()
+						.put("root", s -> {
+							final Pair<EventStream<?>, LuxemPath> context = s.stackTop();
+							return s.popStack().pushStack(context.first);
+						})
+						.put("OBJECT_OPEN", wrap(s -> new LObjectOpenEvent()))
+						.put("OBJECT_CLOSE", wrap(s -> new LObjectCloseEvent()))
+						.put("ARRAY_OPEN", wrap(s -> new LArrayOpenEvent()))
+						.put("ARRAY_CLOSE", wrap(s -> new LArrayCloseEvent()))
+						.put("key", wrap(s -> new LKeyEvent(s.toString())))
+						.put("type", wrap(s -> new LTypeEvent(s.toString())))
+						.put("primitive", wrap(s -> new LPrimitiveEvent(s.toString())))
+						.build()
+				)
+				.parse(stream)
+				.finish();
+	}
+
+	private static Callback wrap(final Function<Clip, LuxemEvent> supplier) {
+		return s -> {
+			final Pair<EventStream<?>, LuxemPath> context = s.stackTop();
+			s = (ClipStore) s.popStack();
+			final EventStream<?> substream = context.first;
+			final LuxemPath path = context.second;
+			final LuxemEvent e = supplier.apply(s.topData());
+			try {
+				return s.pushStack(new Pair<>(substream.push(e, path.toString()), path.push(e)));
+			} catch (final InvalidStream i) {
+				throw new AbortParse(i);
+			}
+		};
 	}
 }
