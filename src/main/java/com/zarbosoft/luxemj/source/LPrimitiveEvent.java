@@ -4,6 +4,7 @@ import com.zarbosoft.luxemj.Luxem;
 import com.zarbosoft.luxemj.LuxemEvent;
 import com.zarbosoft.pidgoon.events.Event;
 
+@Luxem.Configuration(name = "primitive")
 public class LPrimitiveEvent implements LuxemEvent {
 	public LPrimitiveEvent(final String value) {
 		this.value = value;

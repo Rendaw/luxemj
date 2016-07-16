@@ -1,14 +1,14 @@
 root : WS arrayBody;
 
-element : (type WS)? (primitive | object | array);
-type : (TYPE_OPEN (TYPE_LETTER | ESCAPE_PREFIX ESCAPE)* TYPE_CLOSE);
+element : (type WS)? ((primitive WS) | object | array);
+type : TYPE_OPEN (TYPE_LETTER | ESCAPE_PREFIX ESCAPE)* TYPE_CLOSE;
 primitive : text;
 object : OBJECT_OPEN WS objectBody OBJECT_CLOSE WS;
-objectBody : (pair WS (ELEMENT_SEPARATOR WS objectBody )? )?;
+objectBody : (pair (ELEMENT_SEPARATOR WS objectBody )? )?;
 pair : key WS PAIR_SEPARATOR WS element;
 key : text;
 array : ARRAY_OPEN WS arrayBody ARRAY_CLOSE WS;
-arrayBody : (element WS (ELEMENT_SEPARATOR WS arrayBody )? )?;
+arrayBody : (element (ELEMENT_SEPARATOR WS arrayBody )? )?;
 text : WORD | (TEXT_OPEN_CLOSE (LETTER | ESCAPE_PREFIX ESCAPE)* TEXT_OPEN_CLOSE);
 WS : #([ \t\n] | '*' ( ~[*\\] | '\\' . )* '*')*;
 ELEMENT_SEPARATOR : #',';

@@ -4,6 +4,7 @@ import com.zarbosoft.luxemj.Luxem;
 import com.zarbosoft.luxemj.LuxemEvent;
 import com.zarbosoft.pidgoon.events.Event;
 
+@Luxem.Configuration(name = "type")
 public class LTypeEvent implements LuxemEvent {
 
 	public LTypeEvent(final String string) {

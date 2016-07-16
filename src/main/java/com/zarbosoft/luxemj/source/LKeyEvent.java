@@ -4,6 +4,7 @@ import com.zarbosoft.luxemj.Luxem;
 import com.zarbosoft.luxemj.LuxemEvent;
 import com.zarbosoft.pidgoon.events.Event;
 
+@Luxem.Configuration(name = "key")
 public class LKeyEvent implements LuxemEvent {
 	public LKeyEvent(final String string) {
 		value = string;

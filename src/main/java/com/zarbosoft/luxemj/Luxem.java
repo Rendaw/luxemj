@@ -11,8 +11,9 @@ import com.zarbosoft.pidgoon.bytes.Parse;
 import com.zarbosoft.pidgoon.events.BakedOperator;
 import com.zarbosoft.pidgoon.events.Store;
 import com.zarbosoft.pidgoon.events.Terminal;
-import com.zarbosoft.pidgoon.internal.Mutable;
+import com.zarbosoft.pidgoon.internal.Helper;
 import com.zarbosoft.pidgoon.internal.Node;
+import com.zarbosoft.pidgoon.internal.Pair;
 import com.zarbosoft.pidgoon.nodes.*;
 import com.zarbosoft.pidgoon.nodes.Set;
 import org.reflections.Reflections;
@@ -22,6 +23,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.reflect.*;
 import java.util.*;
+import java.util.function.Consumer;
 
 public class Luxem {
 	private static final Reflections reflections = new Reflections("com.zarbosoft");
@@ -34,7 +36,7 @@ public class Luxem {
 					Thread.currentThread().getContextClassLoader().getResourceAsStream("luxem.pidgoon");
 			if (grammarStream == null)
 				throw new AssertionError("Could not load luxem.pidgoon");
-			grammar = GrammarFile.parse().parse(grammarStream);
+			grammar = GrammarFile.parse().uncertainty(630).parse(grammarStream);
 		}
 		return grammar;
 	}
@@ -55,8 +57,13 @@ public class Luxem {
 		private final Type generic;
 
 		public TypeInfo(final Type target) {
-			this.inner = target;
-			this.generic = null;
+			if (target instanceof ParameterizedType) {
+				this.generic = target;
+				this.inner = ((ParameterizedType) target).getRawType();
+			} else {
+				this.inner = target;
+				this.generic = null;
+			}
 		}
 
 		public TypeInfo(final Field f) {
@@ -109,7 +116,7 @@ public class Luxem {
 		} else if (List.class.isAssignableFrom((Class<?>) target.inner)) {
 			if (target.generic == null)
 				throw new AssertionError("Unparameterized list!");
-			final Class<?> innerType = (Class<?>) ((ParameterizedType) target.generic).getActualTypeArguments()[0];
+			final Type innerType = ((ParameterizedType) target.generic).getActualTypeArguments()[0];
 			return new Sequence()
 					.add(new BakedOperator(new Terminal(new LArrayOpenEvent()), s -> s.pushStack(0)))
 					.add(new Repeat(new BakedOperator(this.implementationNodeForType(seen,
@@ -118,7 +125,7 @@ public class Luxem {
 					), s -> {
 						Object temp = s.stackTop();
 						s = (Store) s.popStack();
-						Integer count = (Integer) s.stackTop();
+						Integer count = s.stackTop();
 						s = (Store) s.popStack();
 						return s.pushStack(temp).pushStack(count + 1);
 					})))
@@ -127,77 +134,184 @@ public class Luxem {
 						if (target.inner == List.class)
 							out = new ArrayList<>();
 						else
-							out = (List) Helper.uncheck(() -> ((Class<?>) target.inner).newInstance());
-						s = Helper.stackPopSingleList(s, v -> {
-							out.add(v);
-						});
+							out = (List) Helper.uncheck(((Class<?>) target.inner)::newInstance);
+						s = (Store) Helper.stackPopSingleList(s, out::add);
 						Collections.reverse(out);
 						return s.pushStack(out);
 					}));
-		} else if (((Class<?>) target.inner).isInterface()) {
-			if (!seen.contains(target.inner)) {
-				seen.add(target.inner);
-				final Union out = new Union();
-				Sets
-						.difference(reflections.getSubTypesOf((Class<?>) target.inner), ImmutableSet.of(target))
-						.stream()
-						.map(s -> (Class<?>) s)
-						.filter(s -> !Modifier.isAbstract(s.getModifiers()))
-						.forEach(s -> {
-							out.add(new Sequence()
-									.add(new Terminal(new LTypeEvent(s.getName().toLowerCase())))
-									.add(this.implementationNodeForType(seen, grammar, new TypeInfo(s))));
-						});
-				grammar.add(target.inner.getTypeName(), out);
-			}
-			return new Reference(target.inner.getTypeName());
-		} else {
-			Constructor<?> constructor = null;
-			try {
-				constructor = ((Class<?>) target.inner).getConstructor();
-			} catch (final NoSuchMethodException e) {
-			}
-			if (constructor != null) {
+		} else if (java.util.Set.class.isAssignableFrom((Class<?>) target.inner)) {
+			if (target.generic == null)
+				throw new AssertionError("Unparameterized set!");
+			final Type innerType = ((ParameterizedType) target.generic).getActualTypeArguments()[0];
+			return new Sequence()
+					.add(new BakedOperator(new Terminal(new LArrayOpenEvent()), s -> s.pushStack(0)))
+					.add(new Repeat(new BakedOperator(this.implementationNodeForType(seen,
+							grammar,
+							new TypeInfo(innerType)
+					), s -> {
+						Object temp = s.stackTop();
+						s = (Store) s.popStack();
+						Integer count = s.stackTop();
+						s = (Store) s.popStack();
+						return s.pushStack(temp).pushStack(count + 1);
+					})))
+					.add(new BakedOperator(new Terminal(new LArrayCloseEvent()), s -> {
+						final java.util.Set out;
+						if (target.inner == java.util.Set.class)
+							out = new HashSet();
+						else
+							out = (java.util.Set) Helper.uncheck(((Class<?>) target.inner)::newInstance);
+						s = (Store) Helper.stackPopSingleList(s, (Consumer<Object>) out::add);
+						return s.pushStack(out);
+					}));
+		} else if (Map.class.isAssignableFrom((Class<?>) target.inner)) {
+			if (target.generic == null)
+				throw new AssertionError("Unparameterized map!");
+			if (((ParameterizedType) target.generic).getActualTypeArguments()[0] != String.class)
+				throw new AssertionError("Luxem configurable maps must have String keys.");
+			final Type innerType = ((ParameterizedType) target.generic).getActualTypeArguments()[1];
+			return new Sequence()
+					.add(new BakedOperator(new Terminal(new LObjectOpenEvent()), s -> s.pushStack(0)))
+					.add(new Repeat(new Sequence()
+							.add(new BakedOperator(new Terminal(new LKeyEvent(null)),
+									store -> store.pushStack(((LKeyEvent) store.top()).value)
+							))
+							.add(new BakedOperator(this.implementationNodeForType(seen,
+									grammar,
+									new TypeInfo(innerType)
+							), Helper::stackDoubleElement))))
+					.add(new BakedOperator(new Terminal(new LObjectCloseEvent()), s -> {
+						final Map out;
+						if (target.inner == Map.class)
+							out = new HashMap();
+						else
+							out = (Map) Helper.uncheck(((Class<?>) target.inner)::newInstance);
+						s = (Store) Helper.<Pair<String, Object>>stackPopSingleList(s, p -> out.put(p.first, p.second));
+						return s.pushStack(out);
+					}));
+		} else if (((Class<?>) target.inner).getAnnotation(Configuration.class) != null) {
+			if (((Class<?>) target.inner).isInterface() ||
+					Modifier.isAbstract(((Class<?>) target.inner).getModifiers())) {
 				if (!seen.contains(target.inner)) {
 					seen.add(target.inner);
-					final Sequence seq = new Sequence();
-					seq.add(new Terminal(new LObjectOpenEvent()));
-					final Set set = new Set();
-					final Mutable<Integer> fieldCount = new Mutable<>(0);
-					Class<?> level = (Class<?>) target.inner;
-					while (level.getSuperclass() != null) {
-						Helper
-								.stream(level.getDeclaredFields())
-								.filter(f -> f.getAnnotation(Configuration.class) != null)
-								.forEach(f -> {
-									if ((f.getModifiers() & Modifier.PUBLIC) == 0)
-										throw new AssertionError(String.format(
-												"Field %s in %s marked for luxem serialization is not public.",
-												f,
-												target.inner
-										));
-									set.add(new BakedOperator(new Sequence()
-											.add(new Terminal(new LKeyEvent(f.getName())))
-											.add(this.implementationNodeForType(seen, grammar, new TypeInfo(f))), s -> {
-										return s.pushStack(f);
-									}));
-									fieldCount.value += 1;
-								});
-						level = level.getSuperclass();
-					}
-					seq.add(set);
-					seq.add(new Terminal(new LObjectCloseEvent()));
-					grammar.add(target.inner.getTypeName(), new BakedOperator(seq, s -> {
-						final Object out = Helper.uncheck(() -> ((Class<?>) target.inner).newInstance());
-						return Helper.<Field, Object>stackPopDoubleList(s, fieldCount.value, (k, v) -> {
-							Helper.uncheck(() -> k.set(out, v));
-						}).pushStack(out);
-					}));
+					final Union out = new Union();
+					Sets
+							.difference(reflections.getSubTypesOf((Class<?>) target.inner), ImmutableSet.of(target))
+							.stream()
+							.map(s -> (Class<?>) s)
+							.filter(s -> !Modifier.isAbstract(s.getModifiers()))
+							.forEach(s -> {
+								String name = getConfigurationName(s.getAnnotation(Configuration.class));
+								if (name == null)
+									name = s.getName();
+								out.add(new Sequence()
+										.add(new Terminal(new LTypeEvent(name.toLowerCase())))
+										.add(this.implementationNodeForType(seen, grammar, new TypeInfo(s))));
+							});
+					grammar.add(target.inner.getTypeName(), out);
 				}
 				return new Reference(target.inner.getTypeName());
+			} else {
+				Constructor<?> constructor = null;
+				try {
+					constructor = ((Class<?>) target.inner).getConstructor();
+				} catch (final NoSuchMethodException e) {
+				}
+				if (constructor != null) {
+					if (!seen.contains(target.inner)) {
+						seen.add(target.inner);
+						final java.util.Set<Field> fields = new HashSet<>();
+						Class<?> level = (Class<?>) target.inner;
+						while (level.getSuperclass() != null) {
+							Helper
+									.stream(level.getDeclaredFields())
+									.filter(f -> f.getAnnotation(Configuration.class) != null)
+									.forEach(f -> {
+										if ((f.getModifiers() & Modifier.PUBLIC) == 0)
+											throw new AssertionError(String.format("Field %s marked for luxem serialization is not public.",
+													f
+											));
+										fields.add(f);
+									});
+							level = level.getSuperclass();
+						}
+						final Sequence seq = new Sequence();
+						{
+							seq.add(new BakedOperator(new Terminal(new LObjectOpenEvent()), s -> s.pushStack(0)));
+							final Set set = new Set();
+							fields.forEach(f -> {
+								String fieldName = getConfigurationName(f.getAnnotation(Configuration.class));
+								if (fieldName == null)
+									fieldName = f.getName();
+								final Node subNode;
+								try {
+									subNode = this.implementationNodeForType(seen, grammar, new TypeInfo(f));
+								} catch (final AssertionError e) {
+									throw new AssertionError(String.format("Error creating rule for %s", f), e);
+								}
+								set.add(new BakedOperator(new Sequence()
+										.add(new Terminal(new LKeyEvent(fieldName)))
+										.add(subNode), s -> {
+									s = (Store) s.pushStack(f);
+									return Helper.stackDoubleElement(s);
+								}), !Collection.class.isAssignableFrom(f.getType()));
+							});
+							seq.add(set);
+							seq.add(new Terminal(new LObjectCloseEvent()));
+						}
+						final Node topNode;
+						if (fields.size() == 1) {
+							final Union temp = new Union();
+							temp.add(seq);
+							temp.add(new BakedOperator(this.implementationNodeForType(seen,
+									grammar,
+									new TypeInfo(fields.iterator().next())
+							), s -> {
+								final Object value = s.stackTop();
+								s = (Store) s.popStack();
+								return s.pushStack(new Pair<>(value, fields.iterator().next())).pushStack(1);
+							}));
+							topNode = temp;
+						} else {
+							topNode = seq;
+						}
+						grammar.add(target.inner.getTypeName(), new BakedOperator(topNode, s -> {
+							final Object out = Helper.uncheck(((Class<?>) target.inner)::newInstance);
+							final java.util.Set<Field> fields2 = new HashSet<>();
+							fields2.addAll(fields);
+							s = (Store) Helper.<Pair<Object, Field>>stackPopSingleList(s, (pair) -> {
+								fields2.remove(pair.second);
+								Helper.uncheck(() -> pair.second.set(out, pair.first));
+							});
+							for (final Field field : fields2) {
+								final Class<?> fieldType = field.getType();
+								final Object value;
+								if (fieldType == List.class)
+									value = new ArrayList<>();
+								else if (fieldType == Set.class)
+									value = new HashSet();
+								else if (fieldType == Map.class)
+									value = new HashMap();
+								else
+									value = Helper.uncheck(((Class<?>) target.inner)::newInstance);
+								Helper.uncheck(() -> field.set(out, value));
+							}
+							return s.pushStack(out);
+						}));
+					}
+					return new Reference(target.inner.getTypeName());
+				}
 			}
 		}
 		throw new AssertionError(String.format("Unconfigurable field of type [%s]", target.inner));
+	}
+
+	private String getConfigurationName(final Luxem.Configuration annotation) {
+		if (annotation == null)
+			return null;
+		if (annotation.name().equals(""))
+			return null;
+		return annotation.name();
 	}
 
 	public static void parse(final Map<String, Callback> callbacks, final String string) {
@@ -206,9 +320,8 @@ public class Luxem {
 
 	@Retention(RetentionPolicy.RUNTIME)
 	public @interface Configuration {
+		String name() default "";
 
-	}
-
-	public class PathGenerator {
+		boolean optional() default false;
 	}
 }

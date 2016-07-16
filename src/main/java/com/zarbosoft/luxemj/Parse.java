@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.function.Function;
 
 public class Parse<O> extends BaseParse<Parse<O>> {
+
 	private Parse(final Parse<O> other) {
 		super(other);
 	}
@@ -38,15 +39,14 @@ public class Parse<O> extends BaseParse<Parse<O>> {
 
 	public O parse(final InputStream stream) {
 		return new com.zarbosoft.pidgoon.bytes.Parse<EventStream<O>>()
+				.errorHistory(errorHistoryLimit)
+				.uncertainty(uncertaintyLimit)
 				.stack(() -> {
-					return new Pair<>(
-							new com.zarbosoft.pidgoon.events.Parse<O>()
-									.grammar(grammar)
-									.node(node)
-									.callbacks((Map<String, Callback>) (Object) callbacks)
-									.parse(),
-							new LuxemArrayPath(null)
-					);
+					return new Pair<>(new com.zarbosoft.pidgoon.events.Parse<O>()
+							.grammar(grammar)
+							.node(node)
+							.callbacks((Map<String, Callback>) (Object) callbacks)
+							.parse(), new LuxemArrayPath(null));
 				})
 				.grammar(Luxem.grammar())
 				.node("root")
@@ -62,8 +62,7 @@ public class Parse<O> extends BaseParse<Parse<O>> {
 						.put("key", wrap(s -> new LKeyEvent(s.toString())))
 						.put("type", wrap(s -> new LTypeEvent(s.toString())))
 						.put("primitive", wrap(s -> new LPrimitiveEvent(s.toString())))
-						.build()
-				)
+						.build())
 				.parse(stream)
 				.finish();
 	}
@@ -82,4 +81,5 @@ public class Parse<O> extends BaseParse<Parse<O>> {
 			}
 		};
 	}
+
 }
