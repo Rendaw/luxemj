@@ -128,6 +128,11 @@ public class ForTypeTest {
 	}
 
 	@Test
+	public void testOptionalMap() {
+		check(Subject4.class, "{}", new Subject4(new HashMap<>()));
+	}
+
+	@Test
 	public void test1FieldAbbreviation() {
 		check(Subject.class, "[7, 14]", new Subject(Arrays.asList(new Integer[] {7, 14})));
 	}

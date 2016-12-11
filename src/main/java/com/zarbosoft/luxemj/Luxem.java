@@ -24,6 +24,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.reflect.*;
 import java.util.*;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 public class Luxem {
 	private static final Reflections reflections = new Reflections("com.zarbosoft");
@@ -47,6 +48,22 @@ public class Luxem {
 		return instance;
 	}
 
+	/**
+	 * Returns a grammar for deserializing a type.
+	 * <p>
+	 * The type must be a primitive/box/enum, standard collection, or a class annotated with Configuration.
+	 * For annotated classes,
+	 * - There must be a nullary constructor
+	 * - All fields to deserialize must be annotated with Configuration
+	 * - The constructor and target fields must be public
+	 * If the annotated class is an interface or abstract class, derived classes must also be public and annotated.
+	 * Collection fields are always optional will be populated with a default value type.
+	 * <p>
+	 * To add custom type deserialization, subclass this and override implementationNodeForType.
+	 *
+	 * @param target Subject matter
+	 * @return A grammar that loads target
+	 */
 	static public Grammar grammarForType(final Class<?> target) {
 		return get().implementationGrammarForType(target);
 	}
@@ -113,6 +130,17 @@ public class Luxem {
 				else
 					throw new AbortParse(String.format("Invalid value [%s] for field type [%s]", event.value, target));
 			});
+		} else if (((Class<?>) target.inner).isEnum()) {
+			final Union union = new Union();
+			for (final Object prevalue : ((Class<?>) target.inner).getEnumConstants()) {
+				final Enum<?> value = (Enum<?>) prevalue;
+				final Field field = Helper.uncheck(() -> ((Class<?>) target.inner).getField(value.name()));
+				String name = getConfigurationName(field.getAnnotation(Configuration.class));
+				if (name == null)
+					name = value.name();
+				union.add(new BakedOperator(new Terminal(new LPrimitiveEvent(name)), store -> store.pushStack(value)));
+			}
+			return union;
 		} else if (List.class.isAssignableFrom((Class<?>) target.inner)) {
 			if (target.generic == null)
 				throw new AssertionError("Unparameterized list!");
@@ -216,6 +244,10 @@ public class Luxem {
 				try {
 					constructor = ((Class<?>) target.inner).getConstructor();
 				} catch (final NoSuchMethodException e) {
+					throw new AssertionError(String.format(
+							"Class [%s] of field marked for luxem serialization has no nullary constructor or constructor is not public.",
+							target.inner
+					));
 				}
 				if (constructor != null) {
 					if (!seen.contains(target.inner)) {
@@ -254,22 +286,29 @@ public class Luxem {
 										.add(subNode), s -> {
 									s = (Store) s.pushStack(f);
 									return Helper.stackDoubleElement(s);
-								}), !Collection.class.isAssignableFrom(f.getType()));
+								}), fieldIsRequired(f));
 							});
 							seq.add(set);
 							seq.add(new Terminal(new LObjectCloseEvent()));
 						}
 						final Node topNode;
-						if (fields.size() == 1) {
+						final java.util.Set<Field> minimalFields2 =
+								fields.stream().filter(this::fieldIsRequired).collect(Collectors.toSet());
+						final java.util.Set<Field> minimalFields;
+						if (minimalFields2.size() == 0 && fields.size() == 1)
+							minimalFields = fields;
+						else
+							minimalFields = minimalFields2;
+						if (minimalFields.size() == 1) {
 							final Union temp = new Union();
 							temp.add(seq);
 							temp.add(new BakedOperator(this.implementationNodeForType(seen,
 									grammar,
-									new TypeInfo(fields.iterator().next())
+									new TypeInfo(minimalFields.iterator().next())
 							), s -> {
 								final Object value = s.stackTop();
 								s = (Store) s.popStack();
-								return s.pushStack(new Pair<>(value, fields.iterator().next())).pushStack(1);
+								return s.pushStack(new Pair<>(value, minimalFields.iterator().next())).pushStack(1);
 							}));
 							topNode = temp;
 						} else {
@@ -286,14 +325,36 @@ public class Luxem {
 							for (final Field field : fields2) {
 								final Class<?> fieldType = field.getType();
 								final Object value;
-								if (fieldType == List.class)
-									value = new ArrayList<>();
-								else if (fieldType == Set.class)
-									value = new HashSet();
-								else if (fieldType == Map.class)
-									value = new HashMap();
-								else
-									value = Helper.uncheck(((Class<?>) target.inner)::newInstance);
+								try {
+									if (Collection.class.isAssignableFrom(fieldType)) {
+										if (fieldType == List.class)
+											value = new ArrayList<>();
+										else if (fieldType == java.util.Set.class)
+											value = new HashSet();
+										else
+											value = fieldType.newInstance();
+									} else if (Map.class.isAssignableFrom(fieldType)) {
+										if (fieldType == Map.class)
+											value = new HashMap();
+										else
+											value = fieldType.newInstance();
+									} else
+										continue;
+								} catch (final InstantiationException e) {
+									throw new AssertionError(String.format(
+											"Uninstantiable field [%s] of type [%s] in [%s]",
+											field.getName(),
+											fieldType.getName(),
+											target.inner
+									), e);
+								} catch (final IllegalAccessException e) {
+									throw new AssertionError(String.format(
+											"Uninstantiable field [%s] of type [%s] in [%s]",
+											field.getName(),
+											fieldType.getName(),
+											target.inner
+									), e);
+								}
 								Helper.uncheck(() -> field.set(out, value));
 							}
 							return s.pushStack(out);
@@ -303,7 +364,20 @@ public class Luxem {
 				}
 			}
 		}
-		throw new AssertionError(String.format("Unconfigurable field of type [%s]", target.inner));
+		throw new AssertionError(String.format("Unconfigurable field of type or derived type [%s]", target.inner));
+	}
+
+	private boolean fieldIsRequired(final Field field) {
+		if (Collection.class.isAssignableFrom(field.getType()))
+			return false;
+		if (Map.class.isAssignableFrom(field.getType()))
+			return false;
+		final Configuration annotation = field.getAnnotation(Configuration.class);
+		if (annotation == null)
+			return false;
+		if (annotation.optional())
+			return false;
+		return true;
 	}
 
 	private String getConfigurationName(final Luxem.Configuration annotation) {

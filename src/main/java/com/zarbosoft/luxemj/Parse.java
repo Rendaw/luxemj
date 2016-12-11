@@ -45,6 +45,7 @@ public class Parse<O> extends BaseParse<Parse<O>> {
 					return new Pair<>(new com.zarbosoft.pidgoon.events.Parse<O>()
 							.grammar(grammar)
 							.node(node)
+							.stack(initialStack)
 							.callbacks((Map<String, Callback>) (Object) callbacks)
 							.parse(), new LuxemArrayPath(null));
 				})
