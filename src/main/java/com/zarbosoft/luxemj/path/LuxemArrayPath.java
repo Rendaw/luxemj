@@ -20,8 +20,10 @@ public class LuxemArrayPath extends LuxemPath {
 
 	@Override
 	public LuxemPath value() {
-		if (this.type) return new LuxemArrayPath(parent, false, index);
-		else return new LuxemArrayPath(parent, false, index + 1);
+		if (this.type)
+			return new LuxemArrayPath(parent, false, index);
+		else
+			return new LuxemArrayPath(parent, false, index + 1);
 	}
 
 	@Override
@@ -36,8 +38,7 @@ public class LuxemArrayPath extends LuxemPath {
 
 	@Override
 	public String toString() {
-		return String.format(
-				"%s.%s",
+		return String.format("%s/%s",
 				parent == null ? "" : parent.toString(),
 				index == -1 ? "" : ((Integer) index).toString()
 		);

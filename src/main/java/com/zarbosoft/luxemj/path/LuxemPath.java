@@ -3,9 +3,6 @@ package com.zarbosoft.luxemj.path;
 import com.zarbosoft.luxemj.LuxemEvent;
 import com.zarbosoft.luxemj.source.*;
 
-/**
- * Created by andrew on 6/28/16.
- */
 public abstract class LuxemPath {
 
 	public LuxemPath parent;
@@ -35,6 +32,7 @@ public abstract class LuxemPath {
 			return type();
 		} else if (e.getClass() == LPrimitiveEvent.class) {
 			return value();
-		} else throw new AssertionError(String.format("Unknown luxem event type [%s]", e.getClass()));
+		} else
+			throw new AssertionError(String.format("Unknown luxem event type [%s]", e.getClass()));
 	}
 }

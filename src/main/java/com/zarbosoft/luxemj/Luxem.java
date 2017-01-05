@@ -27,7 +27,7 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 public class Luxem {
-	private static final Reflections reflections = new Reflections("com.zarbosoft");
+	static final Reflections reflections = new Reflections("com.zarbosoft");
 	static private Luxem instance = null;
 	static private Grammar grammar = null;
 
@@ -71,7 +71,7 @@ public class Luxem {
 	public static class TypeInfo {
 
 		public final Type inner;
-		private final Type generic;
+		final Type generic;
 
 		public TypeInfo(final Type target) {
 			if (target instanceof ParameterizedType) {
@@ -222,6 +222,7 @@ public class Luxem {
 					Modifier.isAbstract(((Class<?>) target.inner).getModifiers())) {
 				if (!seen.contains(target.inner)) {
 					seen.add(target.inner);
+					final java.util.Set<String> subclassNames = new HashSet<>();
 					final Union out = new Union();
 					Sets
 							.difference(reflections.getSubTypesOf((Class<?>) target.inner), ImmutableSet.of(target))
@@ -232,6 +233,13 @@ public class Luxem {
 								String name = getConfigurationName(s.getAnnotation(Configuration.class));
 								if (name == null)
 									name = s.getName();
+								if (subclassNames.contains(name))
+									throw new IllegalArgumentException(String.format(
+											"Specific type [%s] of polymorphic type [%s] is ambiguous.",
+											name,
+											target.inner
+									));
+								subclassNames.add(name);
 								out.add(new Sequence()
 										.add(new Terminal(new LTypeEvent(name.toLowerCase())))
 										.add(this.implementationNodeForType(seen, grammar, new TypeInfo(s))));
@@ -293,9 +301,9 @@ public class Luxem {
 						}
 						final Node topNode;
 						final java.util.Set<Field> minimalFields2 =
-								fields.stream().filter(this::fieldIsRequired).collect(Collectors.toSet());
+								fields.stream().filter(Luxem::fieldIsRequired).collect(Collectors.toSet());
 						final java.util.Set<Field> minimalFields;
-						if (minimalFields2.size() == 0 && fields.size() == 1)
+						if (minimalFields2.size() == 0)
 							minimalFields = fields;
 						else
 							minimalFields = minimalFields2;
@@ -367,7 +375,7 @@ public class Luxem {
 		throw new AssertionError(String.format("Unconfigurable field of type or derived type [%s]", target.inner));
 	}
 
-	private boolean fieldIsRequired(final Field field) {
+	static boolean fieldIsRequired(final Field field) {
 		if (Collection.class.isAssignableFrom(field.getType()))
 			return false;
 		if (Map.class.isAssignableFrom(field.getType()))
@@ -380,7 +388,7 @@ public class Luxem {
 		return true;
 	}
 
-	private String getConfigurationName(final Luxem.Configuration annotation) {
+	static String getConfigurationName(final Luxem.Configuration annotation) {
 		if (annotation == null)
 			return null;
 		if (annotation.name().equals(""))
@@ -397,5 +405,7 @@ public class Luxem {
 		String name() default "";
 
 		boolean optional() default false;
+
+		String description() default "";
 	}
 }

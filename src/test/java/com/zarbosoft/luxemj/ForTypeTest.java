@@ -104,6 +104,19 @@ public class ForTypeTest {
 		}
 	}
 
+	@Luxem.Configuration
+	static class Subject5 {
+		public Subject5() {
+		}
+
+		@Luxem.Configuration
+		public String a;
+
+		public Subject5(final String a) {
+			this.a = a;
+		}
+	}
+
 	@Test
 	public void testClassAndList() {
 		check(Subject.class, "{\"a\": [7, 14]}", new Subject(Arrays.asList(new Integer[] {7, 14})));
@@ -140,5 +153,140 @@ public class ForTypeTest {
 	@Test
 	public void test0FieldClass() {
 		check(Subject2.class, "{}", new Subject2());
+	}
+
+	@Luxem.Configuration
+	static class Outer5 {
+		@Luxem.Configuration
+		public List<Subject5> data;
+
+		public Outer5(final List<Subject5> q) {
+			data = q;
+		}
+
+		public Outer5() {
+
+		}
+	}
+
+	@Test
+	public void testRepeatedAbbreviations() {
+		check(Outer5.class,
+				"{data:[q,q,q,q,q,q,q,q,q,q,q,q,q,q,q,q,q,q,q,q]}",
+				new Outer5(Arrays.asList(new Subject5[] {
+						new Subject5("q"),
+						new Subject5("q"),
+						new Subject5("q"),
+						new Subject5("q"),
+						new Subject5("q"),
+						new Subject5("q"),
+						new Subject5("q"),
+						new Subject5("q"),
+						new Subject5("q"),
+						new Subject5("q"),
+						new Subject5("q"),
+						new Subject5("q"),
+						new Subject5("q"),
+						new Subject5("q"),
+						new Subject5("q"),
+						new Subject5("q"),
+						new Subject5("q"),
+						new Subject5("q"),
+						new Subject5("q"),
+						new Subject5("q")
+				}))
+		);
+	}
+
+	@Luxem.Configuration
+	public static abstract class Subject6 {
+	}
+
+	@Luxem.Configuration(name = "6a")
+	public static class Subject6A extends Subject6 {
+		public Subject6A() {
+		}
+
+		@Luxem.Configuration
+		public String a;
+
+		@Luxem.Configuration(optional = true)
+		public String b;
+		@Luxem.Configuration(optional = true)
+		public String c;
+
+		public Subject6A(final String a) {
+			this.a = a;
+		}
+	}
+
+	@Luxem.Configuration(name = "6b")
+	public static class Subject6B extends Subject6 {
+		public Subject6B() {
+		}
+
+		@Luxem.Configuration
+		public String a;
+
+		public Subject6B(final String a) {
+			this.a = a;
+		}
+	}
+
+	@Luxem.Configuration(name = "6c")
+	public static class Subject6C extends Subject6 {
+		public Subject6C() {
+		}
+
+		@Luxem.Configuration
+		public String a;
+
+		public Subject6C(final String a) {
+			this.a = a;
+		}
+	}
+
+	@Luxem.Configuration
+	public static class Outer6 {
+		@Luxem.Configuration
+		public List<Subject6> data;
+
+		public Outer6(final List<Subject6> q) {
+			data = q;
+		}
+
+		public Outer6() {
+
+		}
+	}
+
+	@Test
+	public void testRepeatedPolymorphicAbbreviations() {
+		check(
+				Outer6.class,
+				"{data:[(6a)q,(6a)q,(6a)q,(6a)q,(6a)q,(6a)q,(6a)q,(6a)q,(6a)q,(6a)q,(6a)q,(6a)q,(6a)q,(6a)q,(6a)q,(6a)q,(6a)q,(6a)q,(6a)q,(6a)q]}",
+				new Outer6(Arrays.asList(new Subject6[] {
+						new Subject6A("q"),
+						new Subject6A("q"),
+						new Subject6A("q"),
+						new Subject6A("q"),
+						new Subject6A("q"),
+						new Subject6A("q"),
+						new Subject6A("q"),
+						new Subject6A("q"),
+						new Subject6A("q"),
+						new Subject6A("q"),
+						new Subject6A("q"),
+						new Subject6A("q"),
+						new Subject6A("q"),
+						new Subject6A("q"),
+						new Subject6A("q"),
+						new Subject6A("q"),
+						new Subject6A("q"),
+						new Subject6A("q"),
+						new Subject6A("q"),
+						new Subject6A("q")
+				}))
+		);
 	}
 }

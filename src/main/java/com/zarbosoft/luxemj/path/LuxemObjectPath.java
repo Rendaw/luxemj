@@ -33,6 +33,6 @@ public class LuxemObjectPath extends LuxemPath {
 
 	@Override
 	public String toString() {
-		return String.format("%s.%s", parent == null ? "" : parent.toString(), key == null ? "" : key);
+		return String.format("%s/%s", parent == null ? "" : parent.toString(), key == null ? "" : key);
 	}
 }

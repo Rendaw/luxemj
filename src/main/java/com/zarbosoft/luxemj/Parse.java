@@ -21,8 +21,11 @@ import java.util.function.Function;
 
 public class Parse<O> extends BaseParse<Parse<O>> {
 
+	private int eventUncertainty = 20;
+
 	private Parse(final Parse<O> other) {
 		super(other);
+		this.eventUncertainty = other.eventUncertainty;
 	}
 
 	@Override
@@ -31,6 +34,14 @@ public class Parse<O> extends BaseParse<Parse<O>> {
 	}
 
 	public Parse() {
+	}
+
+	public Parse<O> eventUncertainty(final int limit) {
+		if (eventUncertainty != 20)
+			throw new IllegalArgumentException("Max event uncertainty already set");
+		final Parse<O> out = split();
+		out.eventUncertainty = limit;
+		return out;
 	}
 
 	public O parse(final String string) {
@@ -46,6 +57,8 @@ public class Parse<O> extends BaseParse<Parse<O>> {
 							.grammar(grammar)
 							.node(node)
 							.stack(initialStack)
+							.dumpAmbiguity(dumpAmbiguity)
+							.uncertainty(eventUncertainty)
 							.callbacks((Map<String, Callback>) (Object) callbacks)
 							.parse(), new LuxemArrayPath(null));
 				})
