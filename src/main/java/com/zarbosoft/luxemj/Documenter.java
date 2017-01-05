@@ -1,5 +1,6 @@
 package com.zarbosoft.luxemj;
 
+import com.google.common.collect.ComparisonChain;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import com.zarbosoft.pidgoon.internal.Helper;
@@ -52,6 +53,7 @@ public class Documenter {
 				p("might optionally be shortened to:"),
 				code().withClass("block").withText("(repeat) 4"),
 				h2("Document Root"),
+				p("The root element of the document is:"),
 				documentValuesOf(new Luxem.TypeInfo(root), types, shorten)
 		);
 		if (!types.isEmpty()) {
@@ -89,9 +91,9 @@ public class Documenter {
 		if (target.inner == String.class) {
 			return span("Any string");
 		} else if ((target.inner == int.class) || (target.inner == Integer.class)) {
-			return span(String.format("Any integer [%e,%e]", (double) Integer.MIN_VALUE, (double) Integer.MAX_VALUE));
+			return span("Any integer");
 		} else if ((target.inner == double.class) || (target.inner == Double.class)) {
-			return span(String.format("Any double [%.4e,%.4e]", Double.MIN_VALUE, Double.MAX_VALUE));
+			return span("Any decimal value");
 		} else if ((target.inner == boolean.class) || (target.inner == Boolean.class)) {
 			return ul().with(li().with(code().withText("true")), li().with(code().withText("false")));
 		} else if (((Class<?>) target.inner).isEnum()) {
@@ -142,6 +144,12 @@ public class Documenter {
 						.stream()
 						.map(s -> (Class<?>) s)
 						.filter(s -> !Modifier.isAbstract(s.getModifiers()))
+						.sorted(new Comparator<Class<?>>() {
+							@Override
+							public int compare(final Class<?> o1, final Class<?> o2) {
+								return o1.getTypeName().compareTo(o2.getTypeName());
+							}
+						})
 						.forEach(s -> {
 							String name = Luxem.getConfigurationName(s.getAnnotation(Luxem.Configuration.class));
 							if (name == null)
@@ -193,11 +201,24 @@ public class Documenter {
 						section.with(h2(shorten(shorten, target.inner)));
 						if (!annotation.description().isEmpty())
 							section.with(p(annotation.description()));
-						if (!fields.isEmpty()) {
+						if (fields.isEmpty()) {
+							section.with(p("This type will always appear as an empty object: "),
+									code().withText("{}").withClass("block")
+							);
+						} else {
 							final ContainerTag rows = table();
 							rows.with(tr().withClass("fields").with(th("Fields"), th()));
 							section.with(rows);
-							fields.forEach(f -> {
+							fields.stream().sorted(new Comparator<Field>() {
+								@Override
+								public int compare(final Field o1, final Field o2) {
+									return ComparisonChain
+											.start()
+											.compareTrueFirst(Luxem.fieldIsRequired(o1), Luxem.fieldIsRequired(o2))
+											.compare(o1.getName(), o2.getName())
+											.result();
+								}
+							}).forEach(f -> {
 								final Luxem.Configuration fieldAnnotation = f.getAnnotation(Luxem.Configuration.class);
 								String fieldName = Luxem.getConfigurationName(fieldAnnotation);
 								if (fieldName == null)
